@@ -2,164 +2,475 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Mario Style Car Game</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Slay & Craft RPG: Infinite</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #5c94fc; font-family: 'Courier New', Courier, monospace; }
-        #ui { position: absolute; top: 20px; left: 20px; color: white; font-size: 20px; text-shadow: 2px 2px #000; }
-        canvas { display: block; }
+        :root {
+            --bg-color: #121212;
+            --text-color: #e0e0e0;
+            --accent-color: #ffd700;
+            --border-color: #444;
+            --panel-bg: #1e1e1e;
+            --danger-color: #ff4444;
+            --heal-color: #44ff44;
+        }
+
+        body {
+            font-family: 'Consolas', 'Monaco', 'Meiryo', monospace;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #game-container {
+            width: 100%;
+            max-width: 900px;
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            grid-template-rows: 1fr 180px;
+            gap: 10px;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        /* Status Panel */
+        #status-panel {
+            grid-row: 1 / 2;
+            background: var(--panel-bg);
+            border: 2px solid var(--border-color);
+            padding: 15px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .party-member {
+            margin-bottom: 15px;
+            padding: 8px;
+            border: 1px solid #333;
+            background: #252525;
+        }
+
+        .hp-bar, .mp-bar {
+            width: 100%;
+            height: 6px;
+            background: #333;
+            margin-top: 4px;
+        }
+        .hp-fill { height: 100%; background: var(--danger-color); transition: width 0.3s; }
+        .mp-fill { height: 100%; background: #4444ff; transition: width 0.3s; }
+
+        /* Log Panel */
+        #log-panel {
+            grid-column: 1 / 3;
+            grid-row: 2 / 3;
+            background: #000;
+            border: 2px solid var(--border-color);
+            padding: 10px;
+            font-size: 0.85rem;
+            overflow-y: auto;
+            color: #ccc;
+        }
+        .log-entry { margin-bottom: 2px; border-bottom: 1px solid #111; }
+        .log-hit { color: #ffaa00; }
+        .log-heal { color: #00ff00; }
+
+        /* Action Panel */
+        #action-panel {
+            grid-column: 2 / 3;
+            grid-row: 1 / 2;
+            background: var(--panel-bg);
+            border: 2px solid var(--border-color);
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .view-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .tab-buttons { display: flex; gap: 5px; margin-bottom: 15px; }
+        .tab-buttons button { flex: 1; padding: 10px; font-weight: bold; }
+
+        button {
+            background: #333;
+            color: white;
+            border: 1px solid #555;
+            padding: 8px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        button:hover { background: #444; border-color: var(--accent-color); }
+        button:disabled { opacity: 0.3; cursor: not-allowed; }
+
+        .enemy-box {
+            background: #301010;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: center;
+            border: 2px solid #600;
+            border-radius: 4px;
+        }
+
+        .item-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px;
+            border-bottom: 1px solid #333;
+            font-size: 0.9rem;
+        }
+
+        .hidden { display: none !important; }
+        .gold { color: var(--accent-color); font-weight: bold; }
     </style>
 </head>
 <body>
-    <div id="ui">Score: <span id="score">0</span><br>A/D: 加速・ブレーキ | Space: ジャンプ</div>
-    <canvas id="gameCanvas"></canvas>
+
+<div id="game-container">
+    <div id="status-panel">
+        <h3 style="margin:0 0 10px 0;">🛡️ PARTY</h3>
+        <div id="party-list"></div>
+        <div style="margin-top:auto; padding-top:10px; border-top:1px solid #444;">
+            <p>所持金: <span id="gold-display" class="gold">0</span> G</p>
+            <div id="inventory-summary"></div>
+        </div>
+    </div>
+
+    <div id="action-panel">
+        <div class="tab-buttons">
+            <button onclick="changeScene('explore')">⚔️ 探索</button>
+            <button onclick="changeScene('town')">🏡 町</button>
+            <button onclick="changeScene('craft')">⚒️ 合成</button>
+            <button onclick="changeScene('equip')">🎒 装備</button>
+        </div>
+
+        <div id="explore-view" class="view">
+            <div class="view-header"><h2 id="area-title">無限の回廊</h2></div>
+            <div id="explore-idle">
+                <p>現在の階層: <strong id="floor-display">1</strong> F</p>
+                <button style="width:100%; padding:20px;" onclick="startExplore()">探索を開始する</button>
+            </div>
+            
+            <div id="battle-area" class="hidden">
+                <div class="enemy-box">
+                    <h3 id="enemy-name">Monster</h3>
+                    <div class="hp-bar"><div id="enemy-hp-fill" class="hp-fill"></div></div>
+                </div>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                    <button onclick="battleTurn('attack')">たたかう</button>
+                    <button onclick="battleTurn('skill')">スキル消費MP</button>
+                    <button id="next-btn" class="hidden" onclick="proceedFloor()">次の階層へ</button>
+                    <button id="retreat-btn" onclick="changeScene('town')">町へ戻る</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="town-view" class="view hidden">
+            <h2>休息の宿</h2>
+            <p>15Gでパーティ全員のHP/MPを全快します。</p>
+            <button onclick="rest()">宿屋に泊まる (15G)</button>
+            <hr>
+            <button onclick="saveGame()">セーブする</button>
+        </div>
+
+        <div id="craft-view" class="view hidden">
+            <h2>合成職人</h2>
+            <div id="recipe-list" style="overflow-y:auto; flex-grow:1;"></div>
+        </div>
+
+        <div id="equip-view" class="view hidden">
+            <h2>装備変更</h2>
+            <div id="equip-list"></div>
+        </div>
+    </div>
+
+    <div id="log-panel"></div>
+</div>
 
 <script>
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
-const scoreElement = document.getElementById('score');
-
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
-
-// ゲーム設定
-let score = 0;
-const gravity = 0.6;
-const friction = 0.98; // 摩擦（これがあるから車っぽい）
-
-const car = {
-    x: 100, y: 0, w: 60, h: 30,
-    vx: 0, vy: 0, speed: 0.5,
-    jumpForce: -12, grounded: false,
-    color: '#ff0000'
+// --- ゲームデータ定義 ---
+const INITIAL_STATE = {
+    gold: 100,
+    floor: 1,
+    inventory: { "stone": 3 }, // 初期アイテム
+    ownedEquipment: [], // 所持している装備 {id, name, stat, value}
+    party: [
+        { id:0, name: "勇者", job: "Knight", hp: 60, maxHp: 60, mp: 10, maxMp: 10, atk: 12, def: 8, skillName: "強撃", skillCost: 5, weapon: null },
+        { id:1, name: "魔導士", job: "Wizard", hp: 35, maxHp: 35, mp: 40, maxMp: 40, atk: 18, def: 4, skillName: "爆炎", skillCost: 12, weapon: null },
+        { id:2, name: "僧侶", job: "Priest", hp: 45, maxHp: 45, mp: 25, maxMp: 25, atk: 6, def: 6, skillName: "祈り", skillCost: 8, weapon: null }
+    ]
 };
 
-// ステージオブジェクト（x, y, width, height, type）
-const world = [
-    { x: 0, y: canvas.height - 60, w: 2000, h: 60, type: 'ground' }, // 長い地面
-    { x: 400, y: canvas.height - 180, w: 100, h: 40, type: 'block' },
-    { x: 500, y: canvas.height - 180, w: 100, h: 40, type: 'block' },
-    { x: 800, y: canvas.height - 250, w: 150, h: 30, type: 'block' },
-    { x: 1200, y: canvas.height - 150, w: 200, h: 30, type: 'block' }
+const ITEMS = { "herb": "薬草", "stone": "小石", "iron": "鉄材", "crystal": "魔結晶", "fang": "野獣の牙" };
+
+const RECIPES = [
+    { id: "wep_01", name: "鉄の剣", cost: 50, materials: { iron: 2, stone: 1 }, stat: "atk", value: 10, job: "Knight" },
+    { id: "wep_02", name: "銀の杖", cost: 80, materials: { crystal: 2, herb: 3 }, stat: "atk", value: 15, job: "Wizard" },
+    { id: "wep_03", name: "聖なる盾", cost: 100, materials: { crystal: 1, iron: 3 }, stat: "def", value: 12, job: "Priest" }
 ];
 
-// コイン
-let coins = [
-    { x: 450, y: canvas.height - 220, collected: false },
-    { x: 550, y: canvas.height - 220, collected: false },
-    { x: 850, y: canvas.height - 300, collected: false },
-    { x: 1300, y: canvas.height - 200, collected: false }
-];
+let gameState = JSON.parse(JSON.stringify(INITIAL_STATE));
+let currentEnemy = null;
 
-const goal = { x: 1800, y: canvas.height - 260, w: 20, h: 200 };
+// --- システム関数 ---
+function log(msg, type = '') {
+    const lp = document.getElementById('log-panel');
+    const div = document.createElement('div');
+    div.className = `log-entry ${type}`;
+    div.textContent = `[Floor ${gameState.floor}] ${msg}`;
+    lp.prepend(div);
+}
 
-const keys = {};
-window.addEventListener('keydown', e => keys[e.code] = true);
-window.addEventListener('keyup', e => keys[e.code] = false);
+function updateUI() {
+    document.getElementById('gold-display').textContent = gameState.gold;
+    document.getElementById('floor-display').textContent = gameState.floor;
 
-function update() {
-    // 車の加速
-    if (keys['KeyD'] || keys['ArrowRight']) car.vx += car.speed;
-    if (keys['KeyA'] || keys['ArrowLeft']) car.vx -= car.speed;
+    // パーティ表示
+    const partyList = document.getElementById('party-list');
+    partyList.innerHTML = '';
+    gameState.party.forEach(m => {
+        const weaponBonus = m.weapon ? m.weapon.value : 0;
+        const totalAtk = m.atk + (m.weapon && m.weapon.stat === 'atk' ? weaponBonus : 0);
+        const totalDef = m.def + (m.weapon && m.weapon.stat === 'def' ? weaponBonus : 0);
+        
+        partyList.innerHTML += `
+            <div class="party-member">
+                <div style="display:flex; justify-content:space-between">
+                    <strong>${m.name}</strong> <small>${m.job}</small>
+                </div>
+                HP: ${m.hp}/${m.maxHp}
+                <div class="hp-bar"><div class="hp-fill" style="width:${(m.hp/m.maxHp)*100}%"></div></div>
+                MP: ${m.mp}/${m.maxMp}
+                <div class="mp-bar"><div class="mp-fill" style="width:${(m.mp/m.maxMp)*100}%"></div></div>
+                <div style="font-size:0.75rem; margin-top:5px; color:#aaa;">
+                    ATK: ${totalAtk} / DEF: ${totalDef} <br>
+                    E: ${m.weapon ? m.weapon.name : 'なし'}
+                </div>
+            </div>`;
+    });
+
+    // 合成リスト
+    const recipeDiv = document.getElementById('recipe-list');
+    recipeDiv.innerHTML = '';
+    RECIPES.forEach(r => {
+        const canAfford = gameState.gold >= r.cost && Object.entries(r.materials).every(([k, v]) => (gameState.inventory[k] || 0) >= v);
+        recipeDiv.innerHTML += `
+            <div class="item-row" style="flex-direction:column; border:1px solid #444; margin-bottom:5px; padding:10px;">
+                <div style="display:flex; justify-content:space-between">
+                    <strong>${r.name} (${r.job}用)</strong>
+                    <span class="gold">${r.cost}G</span>
+                </div>
+                <div style="font-size:0.8rem; color:#bbb;">効果: ${r.stat.toUpperCase()}+${r.value}</div>
+                <div style="font-size:0.8rem;">必要: ${Object.entries(r.materials).map(([k,v])=>`${ITEMS[k]}x${v}`).join(' ')}</div>
+                <button onclick="craftItem('${r.id}')" ${canAfford ? '' : 'disabled'} style="margin-top:5px;">合成する</button>
+            </div>`;
+    });
+
+    // インベントリ要約
+    const invSum = document.getElementById('inventory-summary');
+    invSum.innerHTML = '<small>素材: ' + Object.entries(gameState.inventory).filter(([k,v])=>v>0).map(([k,v])=>`${ITEMS[k]}x${v}`).join(', ') + '</small>';
+
+    // 装備リスト
+    const equipDiv = document.getElementById('equip-list');
+    equipDiv.innerHTML = '';
+    if(gameState.ownedEquipment.length === 0) equipDiv.innerHTML = '<p>所持品なし</p>';
+    gameState.ownedEquipment.forEach((eq, index) => {
+        equipDiv.innerHTML += `
+            <div class="item-row">
+                <span>${eq.name} (${eq.stat.toUpperCase()}+${eq.value})</span>
+                <select onchange="equipItem(${index}, this.value)">
+                    <option value="-1">未装備</option>
+                    ${gameState.party.map((m, i) => `<option value="${i}" ${m.weapon && m.weapon.instanceId === eq.instanceId ? 'selected' : ''}>${m.name}</option>`).join('')}
+                </select>
+            </div>`;
+    });
+}
+
+function changeScene(scene) {
+    document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
+    document.getElementById(`${scene}-view`).classList.remove('hidden');
+    if(scene !== 'explore') {
+        document.getElementById('explore-idle').classList.remove('hidden');
+        document.getElementById('battle-area').classList.add('hidden');
+        currentEnemy = null;
+    }
+    updateUI();
+    saveGame();
+}
+
+// --- 戦闘ロジック ---
+function startExplore() {
+    document.getElementById('explore-idle').classList.add('hidden');
+    document.getElementById('battle-area').classList.remove('hidden');
+    spawnEnemy();
+}
+
+function spawnEnemy() {
+    const f = gameState.floor;
+    const names = ["スライム", "ゴブリン", "オーク", "スケルトン", "ゴーレム", "デーモン", "ドラゴン"];
+    const name = names[Math.min(names.length-1, Math.floor(f/3))] + (f > 10 ? "+" : "");
     
-    // ジャンプ
-    if ((keys['Space'] || keys['ArrowUp']) && car.grounded) {
-        car.vy = car.jumpForce;
-        car.grounded = false;
-    }
+    currentEnemy = {
+        name: name,
+        hp: 20 + (f * 15),
+        maxHp: 20 + (f * 15),
+        atk: 5 + (f * 3),
+        gold: 10 + (f * 5),
+        drops: ["stone", "herb", "iron", "crystal", "fang"]
+    };
+    
+    document.getElementById('next-btn').classList.add('hidden');
+    document.getElementById('retreat-btn').classList.remove('hidden');
+    log(`${currentEnemy.name} が現れた！`);
+    updateBattleUI();
+}
 
-    // 物理演算
-    car.vx *= friction;
-    car.vy += gravity;
-    car.x += car.vx;
-    car.y += car.vy;
+function updateBattleUI() {
+    if(!currentEnemy) return;
+    document.getElementById('enemy-name').textContent = `${currentEnemy.name} (Lv.${gameState.floor})`;
+    document.getElementById('enemy-hp-fill').style.width = `${(currentEnemy.hp/currentEnemy.maxHp)*100}%`;
+}
 
-    // 当たり判定
-    car.grounded = false;
-    world.forEach(obj => {
-        if (car.x < obj.x + obj.w && car.x + car.w > obj.x &&
-            car.y < obj.y + obj.h && car.y + car.h > obj.y) {
-            if (car.vy > 0) {
-                car.vy = 0;
-                car.y = obj.y - car.h;
-                car.grounded = true;
+function battleTurn(type) {
+    if(!currentEnemy || currentEnemy.hp <= 0) return;
+
+    // 味方のターン
+    gameState.party.forEach(m => {
+        if(m.hp <= 0 || currentEnemy.hp <= 0) return;
+        
+        const weaponBonus = (m.weapon && m.weapon.stat === 'atk') ? m.weapon.value : 0;
+        const baseAtk = m.atk + weaponBonus;
+
+        if(type === 'skill' && m.mp >= m.skillCost) {
+            m.mp -= m.skillCost;
+            if(m.id === 0) { // 勇者: 単体強撃
+                let d = Math.floor(baseAtk * 2.5);
+                currentEnemy.hp -= d;
+                log(`${m.name}の${m.skillName}！ ${currentEnemy.name}に${d}ダメージ！`, 'log-hit');
+            } else if(m.id === 1) { // 魔導士: 全体（ここでは単体強調）
+                let d = Math.floor(baseAtk * 2.0);
+                currentEnemy.hp -= d;
+                log(`${m.name}の${m.skillName}！ 広範囲を焼き払い${d}ダメージ！`, 'log-hit');
+            } else if(m.id === 2) { // 僧侶: 全体回復
+                gameState.party.forEach(p => p.hp = Math.min(p.maxHp, p.hp + 20));
+                log(`${m.name}の${m.skillName}！ パーティのHPが回復！`, 'log-heal');
             }
+        } else {
+            let d = Math.max(1, baseAtk - Math.floor(gameState.floor));
+            currentEnemy.hp -= d;
+            log(`${m.name}の攻撃：${d}ダメージ。`);
         }
     });
 
-    // コイン取得
-    coins.forEach(c => {
-        if (!c.collected && car.x < c.x + 20 && car.x + car.w > c.x && car.y < c.y + 20 && car.y + car.h > c.y) {
-            c.collected = true;
-            score += 100;
-            scoreElement.innerText = score;
-        }
-    });
+    if(currentEnemy.hp <= 0) {
+        winBattle();
+    } else {
+        // 敵のターン
+        const alive = gameState.party.filter(p => p.hp > 0);
+        const target = alive[Math.floor(Math.random()*alive.length)];
+        const weaponDef = (target.weapon && target.weapon.stat === 'def') ? target.weapon.value : 0;
+        const dmg = Math.max(1, currentEnemy.atk - (target.def + weaponDef));
+        target.hp = Math.max(0, target.hp - dmg);
+        log(`${currentEnemy.name}の攻撃！ ${target.name}に${dmg}ダメージ！`, 'log-hit');
 
-    // ゴール判定
-    if (car.x > goal.x) {
-        alert("GOAL!! スコア: " + score);
-        resetGame();
+        if(gameState.party.every(p => p.hp <= 0)) {
+            log("全滅した... 町へ強制帰還。");
+            gameState.floor = Math.max(1, gameState.floor - 1);
+            gameState.party.forEach(p => p.hp = 1);
+            changeScene('town');
+        }
+    }
+    updateUI();
+    updateBattleUI();
+}
+
+function winBattle() {
+    log(`${currentEnemy.name}を撃破！`);
+    gameState.gold += currentEnemy.gold;
+    log(`${currentEnemy.gold}G 獲得。`);
+
+    // ドロップ判定
+    const drop = currentEnemy.drops[Math.floor(Math.random() * currentEnemy.drops.length)];
+    if(Math.random() > 0.4) {
+        gameState.inventory[drop] = (gameState.inventory[drop] || 0) + 1;
+        log(`素材【${ITEMS[drop]}】を拾った。`);
     }
 
-    // 画面外落下
-    if (car.y > canvas.height) resetGame();
+    document.getElementById('next-btn').classList.remove('hidden');
+    document.getElementById('retreat-btn').classList.add('hidden');
 }
 
-function resetGame() {
-    car.x = 100; car.y = 0; car.vx = 0; car.vy = 0;
-    score = 0; scoreElement.innerText = score;
-    coins.forEach(c => c.collected = false);
+function proceedFloor() {
+    gameState.floor++;
+    spawnEnemy();
 }
 
-function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // カメラ風に画面をスライド（車を中心に）
-    ctx.save();
-    ctx.translate(-car.x + 100, 0);
-
-    // 地面とブロック
-    world.forEach(obj => {
-        ctx.fillStyle = obj.type === 'ground' ? '#70483c' : '#ab5233';
-        ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
-        ctx.strokeStyle = '#000';
-        ctx.strokeRect(obj.x, obj.y, obj.w, obj.h);
-    });
-
-    // コイン
-    ctx.fillStyle = '#fbd424';
-    coins.forEach(c => {
-        if (!c.collected) {
-            ctx.beginPath();
-            ctx.arc(c.x, c.y, 10, 0, Math.PI * 2);
-            ctx.fill();
-        }
-    });
-
-    // ゴールポール
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(goal.x, goal.y, goal.w, goal.h);
-    ctx.fillStyle = '#00aa00';
-    ctx.fillRect(goal.x - 20, goal.y, 20, 30);
-
-    // 車 (簡易的な絵)
-    ctx.fillStyle = car.color;
-    ctx.fillRect(car.x, car.y, car.w, car.h); // ボディ
-    ctx.fillStyle = '#000';
-    ctx.fillRect(car.x + 5, car.y + car.h, 15, 10); // 前輪
-    ctx.fillRect(car.x + car.w - 20, car.y + car.h, 15, 10); // 後輪
-    ctx.fillStyle = '#adf';
-    ctx.fillRect(car.x + 35, car.y + 5, 20, 10); // 窓
-
-    ctx.restore();
-
-    requestAnimationFrame(() => {
-        update();
-        draw();
-    });
+// --- 町・装備ロジック ---
+function rest() {
+    if(gameState.gold >= 15) {
+        gameState.gold -= 15;
+        gameState.party.forEach(p => { p.hp = p.maxHp; p.mp = p.maxMp; });
+        log("宿屋に宿泊しました。HP/MP全快！");
+        updateUI();
+    } else {
+        log("お金が足りません！");
+    }
 }
 
-draw();
+function craftItem(recipeId) {
+    const r = RECIPES.find(x => x.id === recipeId);
+    gameState.gold -= r.cost;
+    Object.entries(r.materials).forEach(([k,v]) => gameState.inventory[k] -= v);
+    
+    const newEquip = {
+        ...r,
+        instanceId: Date.now() + Math.random(),
+    };
+    gameState.ownedEquipment.push(newEquip);
+    log(`合成成功：${r.name}を手に入れた！`);
+    updateUI();
+}
+
+function equipItem(equipIdx, charIdx) {
+    const equip = gameState.ownedEquipment[equipIdx];
+    charIdx = parseInt(charIdx);
+
+    // 他の人が持っていたら外す
+    gameState.party.forEach(m => {
+        if(m.weapon && m.weapon.instanceId === equip.instanceId) m.weapon = null;
+    });
+
+    if(charIdx !== -1) {
+        gameState.party[charIdx].weapon = equip;
+        log(`${gameState.party[charIdx].name}に${equip.name}を装備させた。`);
+    }
+    updateUI();
+}
+
+// --- セーブ/ロード ---
+function saveGame() {
+    localStorage.setItem('hacksla_rpg_save', JSON.stringify(gameState));
+    log("オートセーブ完了。");
+}
+
+function loadGame() {
+    const saved = localStorage.getItem('hacksla_rpg_save');
+    if(saved) {
+        gameState = JSON.parse(saved);
+        log("ロード完了。冒険を再開します。");
+    }
+    updateUI();
+}
+
+loadGame();
 </script>
 </body>
 </html>
