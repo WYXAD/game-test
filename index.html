@@ -1,13 +1,165 @@
-<!doctype html>
+CTYPE html>
 <html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AWS Builder Cards - 2nd Edition Digital</title>
     <script src="https://cdn.tailwindcss.com"></script>
-  </head>
-  <body class="bg-slate-900">
-    <div id="root"></div>
-    <script type="module" src="./src/main.jsx"></script>
-  </body>
-</html>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .card-anim { transition: all 0.2s ease; cursor: pointer; }
+        .card-anim:hover { transform: translateY(-8px) scale(1.02); }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen p-4">
+
+    <div class="max-w-5xl mx-auto">
+        <header class="flex flex-col md:flex-row justify-between items-center mb-8 bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-2xl">
+            <div class="mb-4 md:mb-0 text-center md:text-left">
+                <h1 class="text-2xl font-black text-orange-500 tracking-tighter italic">AWS BUILDER CARDS</h1>
+                <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none">2nd Edition Digital</p>
+            </div>
+            <div class="flex gap-6">
+                <div class="text-center bg-slate-900 px-6 py-2 rounded-xl border border-slate-700">
+                    <p class="text-[10px] text-slate-500 font-bold uppercase">Credits</p>
+                    <p id="credits" class="text-2xl font-mono text-blue-400 font-bold">0</p>
+                </div>
+                <div class="text-center bg-slate-900 px-6 py-2 rounded-xl border border-slate-700">
+                    <p class="text-[10px] text-slate-500 font-bold uppercase">Points</p>
+                    <p id="points" class="text-2xl font-mono text-yellow-400 font-bold">0</p>
+                </div>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            <div class="lg:col-span-3 space-y-8">
+                <section>
+                    <h2 class="text-[10px] font-bold text-slate-500 mb-4 uppercase tracking-[0.2em]">Service Market</h2>
+                    <div id="market-list" class="grid grid-cols-2 md:grid-cols-4 gap-4"></div>
+                </section>
+                
+                <section>
+                    <h2 class="text-[10px] font-bold text-slate-500 mb-4 uppercase tracking-[0.2em]">Well-Architected</h2>
+                    <div id="wa-list" class="flex gap-4"></div>
+                </section>
+
+                <section class="bg-slate-950/50 border-2 border-dashed border-slate-800 rounded-3xl p-6 min-h-[180px]">
+                    <h2 class="text-center text-[10px] font-bold text-slate-700 uppercase mb-4 tracking-widest">Active Architecture</h2>
+                    <div id="play-area" class="flex flex-wrap justify-center gap-3"></div>
+                </section>
+            </div>
+
+            <aside class="bg-slate-950 p-6 rounded-3xl border border-slate-800 h-fit">
+                <h2 class="text-[10px] font-bold text-slate-600 mb-4 uppercase tracking-widest">Logs</h2>
+                <div id="logs" class="space-y-2 text-[11px] font-mono text-slate-500 h-40 overflow-y-auto"></div>
+                <button onclick="endTurn()" class="w-full mt-6 py-4 bg-orange-600 hover:bg-orange-500 rounded-xl font-black text-xs transition-all shadow-lg active:scale-95">NEXT TURN</button>
+            </aside>
+        </div>
+
+        <div class="fixed bottom-0 left-0 right-0 p-6 pointer-events-none">
+            <div id="hand" class="flex justify-center gap-3 pointer-events-auto overflow-x-auto pb-4 px-4"></div>
+        </div>
+    </div>
+
+    <script>
+        // --- 2nd Edition Rules & Data ---
+        const CARDS = {
+            STARTER: { id: 'starter', name: 'Cloud Lift', cost: 0, credit: 1, color: 'bg-orange-50 border-orange-200 text-orange-900', type: 'Starter' },
+            SERVICES: [
+                { id: 'ec2', name: 'Amazon EC2', cost: 0, credit: 1, color: 'bg-blue-50 border-blue-300 text-blue-900', type: 'Compute' },
+                { id: 's3', name: 'Amazon S3', cost: 0, credit: 1, color: 'bg-green-50 border-green-300 text-green-900', type: 'Storage' },
+                { id: 'lambda', name: 'AWS Lambda', cost: 4, credit: 2, color: 'bg-purple-50 border-purple-300 text-purple-900', type: 'Serverless' },
+                { id: 'rds', name: 'Amazon RDS', cost: 5, credit: 2, color: 'bg-indigo-50 border-indigo-300 text-indigo-900', type: 'Database' }
+            ],
+            WA: [
+                { id: 'wa1', name: 'Well-Arch 1pt', cost: 3, points: 1, color: 'bg-yellow-50 border-yellow-300 text-yellow-900', type: 'Score' },
+                { id: 'wa3', name: 'Well-Arch 3pt', cost: 8, points: 3, color: 'bg-yellow-100 border-yellow-500 text-yellow-900', type: 'Score' }
+            ]
+        };
+
+        let state = {
+            credits: 0,
+            points: 0,
+            deck: [],
+            hand: [],
+            discard: [],
+            playArea: []
+        };
+
+        function init() {
+            state.deck = Array(10).fill(CARDS.STARTER).sort(() => Math.random() - 0.5);
+            drawCards(5);
+            render();
+            addLog("System Online. Starting simulation.");
+        }
+
+        function drawCards(count) {
+            for (let i = 0; i < count; i++) {
+                if (state.deck.length === 0) {
+                    state.deck = state.discard.sort(() => Math.random() - 0.5);
+                    state.discard = [];
+                    addLog("Shuffling discard pile into deck.");
+                }
+                if (state.deck.length > 0) state.hand.push(state.deck.pop());
+            }
+        }
+
+        function playCard(index) {
+            const card = state.hand[index];
+            state.hand.splice(index, 1);
+            state.playArea.push(card);
+            state.credits += (card.credit || 0);
+            addLog(`Deployed ${card.name}. +${card.credit || 0} Credits.`);
+            render();
+        }
+
+        function buyCard(cardId, listName) {
+            const list = listName === 'SERVICES' ? CARDS.SERVICES : CARDS.WA;
+            const card = list.find(c => c.id === cardId);
+            
+            if (state.credits >= card.cost) {
+                state.credits -= card.cost;
+                if (card.points) {
+                    state.points += card.points;
+                    addLog(`ACHIEVED: ${card.name}! Score +${card.points}`);
+                } else {
+                    state.discard.push(card);
+                    addLog(`PURCHASED: ${card.name}`);
+                }
+                render();
+            } else {
+                addLog(`ERROR: Insufficient credits for ${card.name}`);
+            }
+        }
+
+        function endTurn() {
+            state.discard = [...state.discard, ...state.playArea, ...state.hand];
+            state.playArea = [];
+            state.hand = [];
+            state.credits = 0;
+            drawCards(5);
+            addLog("Turn complete. New hand provisioned.");
+            render();
+        }
+
+        function addLog(msg) {
+            const logs = document.getElementById('logs');
+            logs.innerHTML = `<div>> ${msg}</div>` + logs.innerHTML;
+        }
+
+        function render() {
+            document.getElementById('credits').innerText = state.credits;
+            document.getElementById('points').innerText = state.points;
+
+            // Market
+            document.getElementById('market-list').innerHTML = CARDS.SERVICES.map(c => `
+                <div onclick="buyCard('${c.id}', 'SERVICES')" class="p-3 rounded-xl border bg-slate-800 ${state.credits >= c.cost ? 'border-slate-600 cursor-pointer hover:border-orange-500' : 'border-slate-800 opacity-40'} transition-all">
+                    <p class="text-[8px] font-bold text-blue-400 mb-1">COST: ${c.cost}</p>
+                    <p class="text-[10px] font-black uppercase text-slate-100">${c.name}</p>
+                </div>
+            `).join('');
+
+            document.getElementById('wa-list').innerHTML = CARDS.WA.map(c => `
+                <div onclick="buyCard('${c.id}', 'WA')" class="p-3 px-6 rounded-xl border bg-slate-800 ${state.credits >= c.cost ? 'border-slate-600 cursor-pointer hover:border-orange-500' : 'border-slate-800 opacity-40'} transition-all">
+
