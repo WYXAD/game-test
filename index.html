@@ -1,113 +1,13 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AWS Builder Cards - Simple Edition</title>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AWS Builder Cards - 2nd Edition Digital</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        .card { transition: transform 0.2s; cursor: pointer; }
-        .card:hover { transform: translateY(-5px); }
-    </style>
-</head>
-<body class="bg-slate-900 text-white p-4">
-    <div class="max-w-4xl mx-auto">
-        <header class="flex justify-between items-center mb-8 bg-slate-800 p-6 rounded-xl border border-slate-700">
-            <h1 class="text-2xl font-bold text-orange-500">AWS Builder Cards</h1>
-            <div class="flex gap-4 text-xl font-mono">
-                <div id="credit-display" class="text-blue-400">Credits: 0</div>
-                <div id="score-display" class="text-yellow-400">Score: 0</div>
-            </div>
-        </header>
-
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div class="md:col-span-2 space-y-6">
-                <h2 class="text-slate-500 font-bold uppercase text-xs">Market</h2>
-                <div id="market" class="grid grid-cols-2 gap-4"></div>
-            </div>
-            
-            <div class="bg-black p-4 rounded-xl border border-slate-800 h-48 overflow-y-auto font-mono text-xs">
-                <div id="logs" class="text-green-500">Welcome, Builder...</div>
-            </div>
-        </div>
-
-        <div class="mt-12">
-            <h2 class="text-slate-500 font-bold uppercase text-xs mb-4 text-center">Your Hand</h2>
-            <div id="hand" class="flex flex-wrap justify-center gap-4 p-6 bg-slate-800 rounded-3xl min-h-[150px]"></div>
-            <div class="flex justify-center mt-6">
-                <button onclick="endTurn()" class="bg-orange-600 px-10 py-4 rounded-xl font-bold hover:bg-orange-500 transition shadow-lg">END TURN</button>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        // --- 簡易版ゲームロジック ---
-        const CARDS = [
-            { id: 'ec2', name: 'Amazon EC2', cost: 0, credit: 1, color: 'bg-blue-100 text-blue-900' },
-            { id: 's3', name: 'Amazon S3', cost: 0, credit: 1, color: 'bg-green-100 text-green-900' },
-            { id: 'lambda', name: 'AWS Lambda', cost: 4, credit: 2, color: 'bg-purple-100 text-purple-900' },
-            { id: 'wa', name: 'Well-Architected', cost: 3, points: 1, color: 'bg-yellow-100 text-yellow-900' }
-        ];
-
-        let credits = 0;
-        let score = 0;
-        let hand = [...Array(5)].map(() => CARDS[0]); // 初期手札はEC2
-
-        function render() {
-            document.getElementById('credit-display').innerText = `Credits: ${credits}`;
-            document.getElementById('score-display').innerText = `Score: ${score}`;
-            
-            const marketEl = document.getElementById('market');
-            marketEl.innerHTML = CARDS.map(card => `
-                <div onclick="buyCard('${card.id}')" class="p-4 ${card.color} rounded-lg card">
-                    <div class="text-[10px] font-bold">COST: ${card.cost}</div>
-                    <div class="font-bold py-2">${card.name}</div>
-                </div>
-            `).join('');
-
-            const handEl = document.getElementById('hand');
-            handEl.innerHTML = hand.map((card, i) => `
-                <div onclick="playCard(${i})" class="w-24 h-36 ${card.color} rounded-lg p-2 card flex flex-col justify-between shadow-xl">
-                    <div class="text-[8px] font-bold">AWS CARD</div>
-                    <div class="text-xs font-bold leading-tight">${card.name}</div>
-                    <div class="text-right font-bold">${card.credit ? '+'+card.credit : ''}</div>
-                </div>
-            `).join('');
-        }
-
-        function playCard(index) {
-            const card = hand[index];
-            credits += (card.credit || 0);
-            hand.splice(index, 1);
-            addLog(`Played ${card.name}. +${card.credit || 0} Credits.`);
-            render();
-        }
-
-        function buyCard(id) {
-            const card = CARDS.find(c => c.id === id);
-            if (credits >= card.cost) {
-                credits -= card.cost;
-                if (card.points) score += card.points;
-                addLog(`Bought ${card.name}!`);
-                render();
-            } else {
-                addLog("Not enough credits!");
-            }
-        }
-
-        function endTurn() {
-            credits = 0;
-            hand = [...Array(5)].map(() => CARDS[Math.floor(Math.random() * 2)]); // 適当に補充
-            addLog("Turn ended. New hand drawn.");
-            render();
-        }
-
-        function addLog(msg) {
-            const logEl = document.getElementById('logs');
-            logEl.innerHTML = `<div>> ${msg}</div>` + logEl.innerHTML;
-        }
-
-        render();
-    </script>
-</body>
+  </head>
+  <body class="bg-slate-900">
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
 </html>
