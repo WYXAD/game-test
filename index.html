@@ -1,165 +1,165 @@
-CTYPE html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AWS Builder Cards - 2nd Edition Digital</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Mario Style Car Game</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
-        body { font-family: 'Inter', sans-serif; }
-        .card-anim { transition: all 0.2s ease; cursor: pointer; }
-        .card-anim:hover { transform: translateY(-8px) scale(1.02); }
+        body { margin: 0; overflow: hidden; background: #5c94fc; font-family: 'Courier New', Courier, monospace; }
+        #ui { position: absolute; top: 20px; left: 20px; color: white; font-size: 20px; text-shadow: 2px 2px #000; }
+        canvas { display: block; }
     </style>
 </head>
-<body class="bg-slate-900 text-slate-100 min-h-screen p-4">
+<body>
+    <div id="ui">Score: <span id="score">0</span><br>A/D: 加速・ブレーキ | Space: ジャンプ</div>
+    <canvas id="gameCanvas"></canvas>
 
-    <div class="max-w-5xl mx-auto">
-        <header class="flex flex-col md:flex-row justify-between items-center mb-8 bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-2xl">
-            <div class="mb-4 md:mb-0 text-center md:text-left">
-                <h1 class="text-2xl font-black text-orange-500 tracking-tighter italic">AWS BUILDER CARDS</h1>
-                <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none">2nd Edition Digital</p>
-            </div>
-            <div class="flex gap-6">
-                <div class="text-center bg-slate-900 px-6 py-2 rounded-xl border border-slate-700">
-                    <p class="text-[10px] text-slate-500 font-bold uppercase">Credits</p>
-                    <p id="credits" class="text-2xl font-mono text-blue-400 font-bold">0</p>
-                </div>
-                <div class="text-center bg-slate-900 px-6 py-2 rounded-xl border border-slate-700">
-                    <p class="text-[10px] text-slate-500 font-bold uppercase">Points</p>
-                    <p id="points" class="text-2xl font-mono text-yellow-400 font-bold">0</p>
-                </div>
-            </div>
-        </header>
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const scoreElement = document.getElementById('score');
 
-        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            <div class="lg:col-span-3 space-y-8">
-                <section>
-                    <h2 class="text-[10px] font-bold text-slate-500 mb-4 uppercase tracking-[0.2em]">Service Market</h2>
-                    <div id="market-list" class="grid grid-cols-2 md:grid-cols-4 gap-4"></div>
-                </section>
-                
-                <section>
-                    <h2 class="text-[10px] font-bold text-slate-500 mb-4 uppercase tracking-[0.2em]">Well-Architected</h2>
-                    <div id="wa-list" class="flex gap-4"></div>
-                </section>
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
 
-                <section class="bg-slate-950/50 border-2 border-dashed border-slate-800 rounded-3xl p-6 min-h-[180px]">
-                    <h2 class="text-center text-[10px] font-bold text-slate-700 uppercase mb-4 tracking-widest">Active Architecture</h2>
-                    <div id="play-area" class="flex flex-wrap justify-center gap-3"></div>
-                </section>
-            </div>
+// ゲーム設定
+let score = 0;
+const gravity = 0.6;
+const friction = 0.98; // 摩擦（これがあるから車っぽい）
 
-            <aside class="bg-slate-950 p-6 rounded-3xl border border-slate-800 h-fit">
-                <h2 class="text-[10px] font-bold text-slate-600 mb-4 uppercase tracking-widest">Logs</h2>
-                <div id="logs" class="space-y-2 text-[11px] font-mono text-slate-500 h-40 overflow-y-auto"></div>
-                <button onclick="endTurn()" class="w-full mt-6 py-4 bg-orange-600 hover:bg-orange-500 rounded-xl font-black text-xs transition-all shadow-lg active:scale-95">NEXT TURN</button>
-            </aside>
-        </div>
+const car = {
+    x: 100, y: 0, w: 60, h: 30,
+    vx: 0, vy: 0, speed: 0.5,
+    jumpForce: -12, grounded: false,
+    color: '#ff0000'
+};
 
-        <div class="fixed bottom-0 left-0 right-0 p-6 pointer-events-none">
-            <div id="hand" class="flex justify-center gap-3 pointer-events-auto overflow-x-auto pb-4 px-4"></div>
-        </div>
-    </div>
+// ステージオブジェクト（x, y, width, height, type）
+const world = [
+    { x: 0, y: canvas.height - 60, w: 2000, h: 60, type: 'ground' }, // 長い地面
+    { x: 400, y: canvas.height - 180, w: 100, h: 40, type: 'block' },
+    { x: 500, y: canvas.height - 180, w: 100, h: 40, type: 'block' },
+    { x: 800, y: canvas.height - 250, w: 150, h: 30, type: 'block' },
+    { x: 1200, y: canvas.height - 150, w: 200, h: 30, type: 'block' }
+];
 
-    <script>
-        // --- 2nd Edition Rules & Data ---
-        const CARDS = {
-            STARTER: { id: 'starter', name: 'Cloud Lift', cost: 0, credit: 1, color: 'bg-orange-50 border-orange-200 text-orange-900', type: 'Starter' },
-            SERVICES: [
-                { id: 'ec2', name: 'Amazon EC2', cost: 0, credit: 1, color: 'bg-blue-50 border-blue-300 text-blue-900', type: 'Compute' },
-                { id: 's3', name: 'Amazon S3', cost: 0, credit: 1, color: 'bg-green-50 border-green-300 text-green-900', type: 'Storage' },
-                { id: 'lambda', name: 'AWS Lambda', cost: 4, credit: 2, color: 'bg-purple-50 border-purple-300 text-purple-900', type: 'Serverless' },
-                { id: 'rds', name: 'Amazon RDS', cost: 5, credit: 2, color: 'bg-indigo-50 border-indigo-300 text-indigo-900', type: 'Database' }
-            ],
-            WA: [
-                { id: 'wa1', name: 'Well-Arch 1pt', cost: 3, points: 1, color: 'bg-yellow-50 border-yellow-300 text-yellow-900', type: 'Score' },
-                { id: 'wa3', name: 'Well-Arch 3pt', cost: 8, points: 3, color: 'bg-yellow-100 border-yellow-500 text-yellow-900', type: 'Score' }
-            ]
-        };
+// コイン
+let coins = [
+    { x: 450, y: canvas.height - 220, collected: false },
+    { x: 550, y: canvas.height - 220, collected: false },
+    { x: 850, y: canvas.height - 300, collected: false },
+    { x: 1300, y: canvas.height - 200, collected: false }
+];
 
-        let state = {
-            credits: 0,
-            points: 0,
-            deck: [],
-            hand: [],
-            discard: [],
-            playArea: []
-        };
+const goal = { x: 1800, y: canvas.height - 260, w: 20, h: 200 };
 
-        function init() {
-            state.deck = Array(10).fill(CARDS.STARTER).sort(() => Math.random() - 0.5);
-            drawCards(5);
-            render();
-            addLog("System Online. Starting simulation.");
-        }
+const keys = {};
+window.addEventListener('keydown', e => keys[e.code] = true);
+window.addEventListener('keyup', e => keys[e.code] = false);
 
-        function drawCards(count) {
-            for (let i = 0; i < count; i++) {
-                if (state.deck.length === 0) {
-                    state.deck = state.discard.sort(() => Math.random() - 0.5);
-                    state.discard = [];
-                    addLog("Shuffling discard pile into deck.");
-                }
-                if (state.deck.length > 0) state.hand.push(state.deck.pop());
+function update() {
+    // 車の加速
+    if (keys['KeyD'] || keys['ArrowRight']) car.vx += car.speed;
+    if (keys['KeyA'] || keys['ArrowLeft']) car.vx -= car.speed;
+    
+    // ジャンプ
+    if ((keys['Space'] || keys['ArrowUp']) && car.grounded) {
+        car.vy = car.jumpForce;
+        car.grounded = false;
+    }
+
+    // 物理演算
+    car.vx *= friction;
+    car.vy += gravity;
+    car.x += car.vx;
+    car.y += car.vy;
+
+    // 当たり判定
+    car.grounded = false;
+    world.forEach(obj => {
+        if (car.x < obj.x + obj.w && car.x + car.w > obj.x &&
+            car.y < obj.y + obj.h && car.y + car.h > obj.y) {
+            if (car.vy > 0) {
+                car.vy = 0;
+                car.y = obj.y - car.h;
+                car.grounded = true;
             }
         }
+    });
 
-        function playCard(index) {
-            const card = state.hand[index];
-            state.hand.splice(index, 1);
-            state.playArea.push(card);
-            state.credits += (card.credit || 0);
-            addLog(`Deployed ${card.name}. +${card.credit || 0} Credits.`);
-            render();
+    // コイン取得
+    coins.forEach(c => {
+        if (!c.collected && car.x < c.x + 20 && car.x + car.w > c.x && car.y < c.y + 20 && car.y + car.h > c.y) {
+            c.collected = true;
+            score += 100;
+            scoreElement.innerText = score;
         }
+    });
 
-        function buyCard(cardId, listName) {
-            const list = listName === 'SERVICES' ? CARDS.SERVICES : CARDS.WA;
-            const card = list.find(c => c.id === cardId);
-            
-            if (state.credits >= card.cost) {
-                state.credits -= card.cost;
-                if (card.points) {
-                    state.points += card.points;
-                    addLog(`ACHIEVED: ${card.name}! Score +${card.points}`);
-                } else {
-                    state.discard.push(card);
-                    addLog(`PURCHASED: ${card.name}`);
-                }
-                render();
-            } else {
-                addLog(`ERROR: Insufficient credits for ${card.name}`);
-            }
+    // ゴール判定
+    if (car.x > goal.x) {
+        alert("GOAL!! スコア: " + score);
+        resetGame();
+    }
+
+    // 画面外落下
+    if (car.y > canvas.height) resetGame();
+}
+
+function resetGame() {
+    car.x = 100; car.y = 0; car.vx = 0; car.vy = 0;
+    score = 0; scoreElement.innerText = score;
+    coins.forEach(c => c.collected = false);
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // カメラ風に画面をスライド（車を中心に）
+    ctx.save();
+    ctx.translate(-car.x + 100, 0);
+
+    // 地面とブロック
+    world.forEach(obj => {
+        ctx.fillStyle = obj.type === 'ground' ? '#70483c' : '#ab5233';
+        ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+        ctx.strokeStyle = '#000';
+        ctx.strokeRect(obj.x, obj.y, obj.w, obj.h);
+    });
+
+    // コイン
+    ctx.fillStyle = '#fbd424';
+    coins.forEach(c => {
+        if (!c.collected) {
+            ctx.beginPath();
+            ctx.arc(c.x, c.y, 10, 0, Math.PI * 2);
+            ctx.fill();
         }
+    });
 
-        function endTurn() {
-            state.discard = [...state.discard, ...state.playArea, ...state.hand];
-            state.playArea = [];
-            state.hand = [];
-            state.credits = 0;
-            drawCards(5);
-            addLog("Turn complete. New hand provisioned.");
-            render();
-        }
+    // ゴールポール
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(goal.x, goal.y, goal.w, goal.h);
+    ctx.fillStyle = '#00aa00';
+    ctx.fillRect(goal.x - 20, goal.y, 20, 30);
 
-        function addLog(msg) {
-            const logs = document.getElementById('logs');
-            logs.innerHTML = `<div>> ${msg}</div>` + logs.innerHTML;
-        }
+    // 車 (簡易的な絵)
+    ctx.fillStyle = car.color;
+    ctx.fillRect(car.x, car.y, car.w, car.h); // ボディ
+    ctx.fillStyle = '#000';
+    ctx.fillRect(car.x + 5, car.y + car.h, 15, 10); // 前輪
+    ctx.fillRect(car.x + car.w - 20, car.y + car.h, 15, 10); // 後輪
+    ctx.fillStyle = '#adf';
+    ctx.fillRect(car.x + 35, car.y + 5, 20, 10); // 窓
 
-        function render() {
-            document.getElementById('credits').innerText = state.credits;
-            document.getElementById('points').innerText = state.points;
+    ctx.restore();
 
-            // Market
-            document.getElementById('market-list').innerHTML = CARDS.SERVICES.map(c => `
-                <div onclick="buyCard('${c.id}', 'SERVICES')" class="p-3 rounded-xl border bg-slate-800 ${state.credits >= c.cost ? 'border-slate-600 cursor-pointer hover:border-orange-500' : 'border-slate-800 opacity-40'} transition-all">
-                    <p class="text-[8px] font-bold text-blue-400 mb-1">COST: ${c.cost}</p>
-                    <p class="text-[10px] font-black uppercase text-slate-100">${c.name}</p>
-                </div>
-            `).join('');
+    requestAnimationFrame(() => {
+        update();
+        draw();
+    });
+}
 
-            document.getElementById('wa-list').innerHTML = CARDS.WA.map(c => `
-                <div onclick="buyCard('${c.id}', 'WA')" class="p-3 px-6 rounded-xl border bg-slate-800 ${state.credits >= c.cost ? 'border-slate-600 cursor-pointer hover:border-orange-500' : 'border-slate-800 opacity-40'} transition-all">
-
+draw();
+</script>
+</body>
+</html>
